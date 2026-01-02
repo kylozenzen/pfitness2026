@@ -2667,7 +2667,7 @@ const motivationalQuotes = [
     };
 
     // ========== PROFILE TAB ==========
-    const ProfileView = ({ profile, setProfile, settings, setSettings, onReset }) => {
+    const ProfileView = ({ profile, setProfile, settings, setSettings, onReset, onExportData, onImportData }) => {
       const [showLearn, setShowLearn] = useState(false);
       const [expandedTopic, setExpandedTopic] = useState(null);
       const [showAvatarPicker, setShowAvatarPicker] = useState(false);
@@ -3159,7 +3159,7 @@ const motivationalQuotes = [
 
                 <div className="mt-4 space-y-3">
                   {showUpdateProfile && profile.weight > 0 && (
-                    <button 
+                    <button
                       onClick={() => {
                         // Force recalculation by updating a timestamp
                         setProfile({...profile, lastRecalc: Date.now()});
@@ -3170,8 +3170,22 @@ const motivationalQuotes = [
                     </button>
                   )}
 
-                  <button 
-                    onClick={onReset} 
+                  <button
+                    onClick={onExportData}
+                    className={`w-full p-4 rounded-xl font-bold flex items-center justify-between transition-colors ${settings.darkMode ? 'bg-gray-900 border border-gray-700 text-blue-400 hover:bg-gray-800' : 'bg-white border border-gray-200 text-blue-600 hover:bg-blue-50'}`}
+                  >
+                    <span>💾 Export Data</span><Icon name="ChevronDown" className="w-4 h-4"/>
+                  </button>
+
+                  <button
+                    onClick={onImportData}
+                    className={`w-full p-4 rounded-xl font-bold flex items-center justify-between transition-colors ${settings.darkMode ? 'bg-gray-900 border border-gray-700 text-green-400 hover:bg-gray-800' : 'bg-white border border-gray-200 text-green-600 hover:bg-green-50'}`}
+                  >
+                    <span>📂 Import Data</span><Icon name="ChevronRight" className="w-4 h-4"/>
+                  </button>
+
+                  <button
+                    onClick={onReset}
                     className={`w-full p-4 rounded-xl font-bold flex items-center justify-between transition-colors ${settings.darkMode ? 'bg-gray-900 border border-gray-700 text-red-400 hover:bg-gray-800' : 'bg-white border border-gray-200 text-red-600 hover:bg-red-50'}`}
                   >
                     <span>Reset All Data</span><Icon name="Trash" className="w-4 h-4"/>
@@ -3345,13 +3359,92 @@ const motivationalQuotes = [
 
       const completeOnboarding = () => {
         setProfile(prev => ({
-          ...prev, 
+          ...prev,
           onboarded: true,
           activityLevel: prev.activityLevel || 'Moderately Active',
           goal: prev.goal || 'recomp'
         }));
         setView('app');
         setTab('home');
+      };
+
+      const handleExportData = () => {
+        try {
+          const exportData = {
+            version: 'v2',
+            exportDate: new Date().toISOString(),
+            profile,
+            settings,
+            history,
+            appState
+          };
+
+          const dataStr = JSON.stringify(exportData, null, 2);
+          const dataBlob = new Blob([dataStr], { type: 'application/json' });
+          const url = URL.createObjectURL(dataBlob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `planet-strength-backup-${new Date().toISOString().split('T')[0]}.json`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+
+          alert('✅ Data exported successfully! Your backup file has been downloaded.');
+        } catch (error) {
+          alert('❌ Export failed: ' + error.message);
+        }
+      };
+
+      const handleImportData = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'application/json';
+
+        input.onchange = (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            try {
+              const importedData = JSON.parse(event.target.result);
+
+              // Validate the imported data
+              if (!importedData.profile || !importedData.settings) {
+                alert('❌ Invalid backup file format.');
+                return;
+              }
+
+              if (confirm('⚠️ Import will replace all current data. Continue?')) {
+                // Restore all data
+                if (importedData.profile) {
+                  setProfile(importedData.profile);
+                  storage.set('ps_v2_profile', importedData.profile);
+                }
+                if (importedData.settings) {
+                  setSettings(importedData.settings);
+                  storage.set('ps_v2_settings', importedData.settings);
+                }
+                if (importedData.history) {
+                  setHistory(importedData.history);
+                  storage.set('ps_v2_history', importedData.history);
+                }
+                if (importedData.appState) {
+                  setAppState(importedData.appState);
+                  storage.set('ps_v2_state', importedData.appState);
+                }
+
+                alert('✅ Data imported successfully! Your backup has been restored.');
+              }
+            } catch (error) {
+              alert('❌ Import failed: Invalid JSON file or corrupted data.');
+            }
+          };
+          reader.readAsText(file);
+        };
+
+        input.click();
       };
 
       if (!loaded) return null;
@@ -3414,6 +3507,8 @@ const motivationalQuotes = [
                       settings={settings}
                       setSettings={setSettings}
                       onReset={handleReset}
+                      onExportData={handleExportData}
+                      onImportData={handleImportData}
                     />
                   )}
                 </>
